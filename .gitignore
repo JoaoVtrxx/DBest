@@ -241,3 +241,6 @@ nbactions.xml
 
 # API upload scratch directory (runtime artifact, created wherever the API runs)
 uploads/
+
+# Frontend build output bundled into the API jar (generated from dbest-web/out)
+dbest-api/src/main/resources/static/

@@ -3,7 +3,22 @@
  * All API calls go through here so the base URL is easily configurable.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api";
+/**
+ * Resolves the API base URL at runtime (in the browser), so the same build works
+ * both ways without any build-time configuration:
+ *  - bundled in the Spring Boot jar, the UI is served from the API's own origin →
+ *    use a same-origin relative "/api";
+ *  - under `next dev` the UI runs on :3000 while the API runs on :8080 → point at
+ *    the API on :8080.
+ * An explicit NEXT_PUBLIC_API_URL always wins if set.
+ */
+function resolveApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined" && window.location.port === "3000") {
+    return "http://localhost:8080/api";
+  }
+  return "/api";
+}
 
 export class ApiError extends Error {
   constructor(
@@ -19,7 +34,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  const url = `${resolveApiBase()}${path}`;
   const isFormData = options.body instanceof FormData;
   const headers = { ...options.headers } as Record<string, string>;
   if (!isFormData && !headers["Content-Type"]) {

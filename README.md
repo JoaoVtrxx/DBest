@@ -93,6 +93,54 @@ Abra <http://localhost:3000>. O frontend fala com a API em
 `http://localhost:8080/api` (configurável por `NEXT_PUBLIC_API_URL`). A API só
 aceita requisições de `localhost:3000` / `127.0.0.1:3000` (CORS).
 
+## Gerar o jar executável (tudo em um)
+
+Para distribuir a ferramenta como **um único arquivo**, sem Node e sem passos
+intermediários para quem só quer rodar: o frontend é exportado como site estático
+e embutido dentro do jar do Spring Boot. Assim, `java -jar` sobe a API **e** serve
+a interface na mesma porta (8080) e abre o navegador sozinho.
+
+O jar final precisa só de **Java 17+** para rodar. O Node é necessário apenas para
+gerar o build abaixo.
+
+1. Exportar o frontend como site estático (ele descobre a URL da API em runtime —
+   usa a mesma origem quando servido pelo jar):
+
+   ```bash
+   cd dbest-web
+   npm ci
+   npm run build      # gera dbest-web/out/
+   ```
+
+2. Copiar a UI gerada para dentro dos recursos da API (a partir da raiz do repo):
+
+   ```bash
+   rm -rf dbest-api/src/main/resources/static && mkdir -p dbest-api/src/main/resources/static
+   cp -r dbest-web/out/* dbest-api/src/main/resources/static/
+   ```
+
+   No Windows (cmd): `rmdir /S /Q dbest-api\src\main\resources\static & xcopy /E /I dbest-web\out dbest-api\src\main\resources\static`
+
+3. Gerar o jar:
+
+   ```bash
+   mvn -pl dbest-api -am -DskipTests package
+   ```
+
+   Saída: `dbest-api/target/dbest-api-0.0.1-SNAPSHOT.jar`.
+
+4. Rodar (em qualquer máquina com Java 17+):
+
+   ```bash
+   java -jar dbest-api-0.0.1-SNAPSHOT.jar
+   ```
+
+   Abre `http://localhost:8080` no navegador automaticamente. Para não abrir sozinho,
+   use `--dbest.open-browser=false`.
+
+> A pasta `dbest-api/src/main/resources/static/` é **gerada** neste processo (está no
+> `.gitignore`) — é o build do frontend embutido, não código-fonte.
+
 ## Testes
 
 Os testes do frontend precisam da API no ar; o Playwright sobe o Next sozinho.
