@@ -8,9 +8,8 @@ test.describe("E2E Query Execution", () => {
 
   test("should import CSV, build a tree with FILTER, and execute it", async ({ page }) => {
     // 1. Import CSV Table
-    const importCsvBtn = page.getByTestId("import-csv-btn");
-    await expect(importCsvBtn).toBeVisible();
-    await importCsvBtn.click();
+    await page.getByTestId("menu-file-btn").click();
+    await page.getByTestId("menu-import-csv").click();
 
     // Fill the modal
     await page.locator('input[placeholder="Defaults to filename without extension"]').fill("students");

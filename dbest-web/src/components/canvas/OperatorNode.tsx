@@ -60,6 +60,15 @@ const OPERATOR_ICONS: Record<string, string> = {
   REFERENCE: "⤴",
 };
 
+// Operators that take two inputs (left/right). Everything else is unary and
+// gets a single input handle. These binary operators are not in the current
+// palette (kept for the continuation work described in the README).
+const BINARY_OPERATORS = new Set<string>([
+  "NESTED_LOOP_JOIN", "MERGE_JOIN", "HASH_JOIN", "HASH_INNER_JOIN", "CROSS_JOIN",
+  "CARTESIAN_PRODUCT", "APPEND", "UNION", "UNION_ALL", "HASH_UNION",
+  "INTERSECTION", "HASH_INTERSECTION", "DIFFERENCE", "HASH_DIFFERENCE",
+]);
+
 const OperatorNode = memo(({ id, data, selected }: NodeProps) => {
   const nodeData = data as OperatorNodeData;
   const icon = OPERATOR_ICONS[nodeData.operatorType] ?? "⚙";
@@ -213,31 +222,22 @@ const OperatorNode = memo(({ id, data, selected }: NodeProps) => {
         </div>
       </div>
 
-      {/* Target handles (inputs — top) */}
-      <Handle
-        id="target-left"
-        type="target"
-        position={Position.Bottom}
-        style={{
-          left: "35%",
-          background: "#94a3b8",
-          width: 9,
-          height: 9,
-          border: "2px solid #fff",
-        }}
-      />
-      <Handle
-        id="target-right"
-        type="target"
-        position={Position.Bottom}
-        style={{
-          left: "65%",
-          background: "#94a3b8",
-          width: 9,
-          height: 9,
-          border: "2px solid #fff",
-        }}
-      />
+      {/* Target handles (inputs — bottom).
+          Binary operators get two handles (left/right); unary operators get a
+          single centered handle. The beta palette only exposes unary operators,
+          so in practice this renders one handle — but the binary path is kept
+          for when joins/set ops are re-enabled. */}
+      {BINARY_OPERATORS.has(nodeData.operatorType) ? (
+        <>
+          <Handle id="target-left" type="target" position={Position.Bottom}
+            style={{ left: "35%", background: "#94a3b8", width: 9, height: 9, border: "2px solid #fff" }} />
+          <Handle id="target-right" type="target" position={Position.Bottom}
+            style={{ left: "65%", background: "#94a3b8", width: 9, height: 9, border: "2px solid #fff" }} />
+        </>
+      ) : (
+        <Handle id="target-left" type="target" position={Position.Bottom}
+          style={{ left: "50%", background: "#94a3b8", width: 9, height: 9, border: "2px solid #fff" }} />
+      )}
 
       {/* Source handle (output — bottom) */}
       <Handle

@@ -19,12 +19,9 @@ test.describe("DBest Web Canvas & Layout E2E Tests", () => {
     await expect(canvas).toBeVisible();
   });
 
-  test("should open the CSV import modal when clicking the CSV import button", async ({ page }) => {
-    const importCsvBtn = page.getByTestId("import-csv-btn");
-    await expect(importCsvBtn).toBeVisible();
-
-    // Click to open the modal
-    await importCsvBtn.click();
+  test("should open the CSV import modal from the File menu", async ({ page }) => {
+    await page.getByTestId("menu-file-btn").click();
+    await page.getByTestId("menu-import-csv").click();
 
     // Verify CSV modal title and inputs are visible
     const modalTitle = page.locator("text=Import CSV Table");
@@ -37,11 +34,9 @@ test.describe("DBest Web Canvas & Layout E2E Tests", () => {
     await expect(separatorSelect).toBeVisible();
   });
 
-  test("should open the XML import modal when clicking the XML import button", async ({ page }) => {
-    const importXmlBtn = page.getByTestId("import-xml-btn");
-    await expect(importXmlBtn).toBeVisible();
-
-    await importXmlBtn.click();
+  test("should open the XML import modal from the File menu", async ({ page }) => {
+    await page.getByTestId("menu-file-btn").click();
+    await page.getByTestId("menu-import-xml").click();
 
     const modalTitle = page.locator("text=Import XML Table");
     await expect(modalTitle).toBeVisible();

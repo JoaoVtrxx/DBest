@@ -44,7 +44,7 @@ async function request<T>(
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type TableType = "csv" | "fyi" | "xml" | "memory" | "jdbc";
+export type TableType = "csv" | "fyi" | "xml" | "memory";
 
 export interface ColumnSchema {
   name: string;
@@ -95,14 +95,6 @@ export interface ImportMemoryRequest {
   columns: string[];
 }
 
-export interface ImportJDBCRequest {
-  url: string;
-  user: string;
-  password: string;
-  tableName: string;
-  schema?: string;
-}
-
 // ── Graph serialization ────────────────────────────────────────────────────────
 
 export type NodeType = "table" | "operator" | "tableNode" | "operatorNode";
@@ -121,6 +113,10 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
+  /** Which input handle of the target this edge connects to, for binary
+   *  operators: "target-left" or "target-right". Lets the backend tell the
+   *  left child from the right child. Undefined for unary operators. */
+  targetHandle?: string | null;
 }
 
 export interface QueryGraph {
@@ -151,13 +147,29 @@ export interface ScanResult extends ResultPage {
   executionTimeMs: number;
 }
 
-// ── Session ────────────────────────────────────────────────────────────────────
+// ── Comparator ───────────────────────────────────────────────────────────────
 
-export interface SessionData {
-  tables: TableSchema[];
-  canvasNodes: unknown[];
-  canvasEdges: unknown[];
-  savedAt: string;
+/** One plan to compare (an operator graph rooted at a marked node). */
+export interface ComparePlanRequest extends QueryGraph {
+  id: string;
+  label: string;
+}
+
+/** Per-plan execution-cost metrics returned by POST /api/query/compare.
+ *  `metrics` is keyed by the core's CellStats field names (PK_SEARCH,
+ *  SORT_TUPLES, COMPARE_FILTER, RECORDS_READ, NEXT_CALLS, MEMORY_USED,
+ *  BLOCKS_ACCESSED, BLOCKS_LOADED, BLOCKS_SAVED). */
+export interface ComparePlanStats {
+  id: string;
+  label: string;
+  ok: boolean;
+  error?: string;
+  tuplesLoaded: number;
+  metrics: Record<string, number>;
+}
+
+export interface CompareResult {
+  plans: ComparePlanStats[];
 }
 
 // ── API Methods ────────────────────────────────────────────────────────────────
@@ -188,9 +200,6 @@ export const api = {
     importMemory: (body: ImportMemoryRequest) =>
       request<TableSchema>("/tables/memory", { method: "POST", body: JSON.stringify(body) }),
 
-    importJDBC: (body: ImportJDBCRequest) =>
-      request<TableSchema>("/tables/jdbc", { method: "POST", body: JSON.stringify(body) }),
-
     /** Import BTree from .dat file path (backend auto-discovers .head) */
     importDat: (datFilePath: string) =>
       request<TableSchema>("/tables/dat", { method: "POST", body: JSON.stringify({ datFilePath }) }),
@@ -211,6 +220,19 @@ export const api = {
         body: formData,
       });
     },
+
+    /** Upload a BTree table's two files together (.dat + .head). A BTree table
+     *  cannot be read from the .dat alone. Either file may be omitted, but both
+     *  together is the reliable path. */
+    uploadBtree: (files: { dat?: File | null; head?: File | null }) => {
+      const formData = new FormData();
+      if (files.dat) formData.append("files", files.dat);
+      if (files.head) formData.append("files", files.head);
+      return request<TableSchema>("/tables/upload-btree", {
+        method: "POST",
+        body: formData,
+      });
+    },
   },
 
   // Query execution
@@ -220,21 +242,17 @@ export const api = {
 
     result: (jobId: string, page = 0, pageSize = 50) =>
       request<ResultPage>(`/query/result/${jobId}?page=${page}&size=${pageSize}`),
+
+    /** Compare marked query plans, returning the desktop's execution-cost metrics
+     *  per plan. `limit` caps tuples read per plan (0 = read all). */
+    compare: (plans: ComparePlanRequest[], limit = 0) =>
+      request<CompareResult>("/query/compare", {
+        method: "POST",
+        body: JSON.stringify({ plans, limit }),
+      }),
   },
 
-  // DSL
-  dsl: {
-    parse: (dslText: string) =>
-      request<{
-        importedTables: TableSchema[];
-        graph: { rootNodeId: string; nodes: import("@xyflow/react").Node[]; edges: import("@xyflow/react").Edge[] };
-      }>("/dsl/parse", { method: "POST", body: JSON.stringify({ dslText }) }),
-
-    generate: (graph: QueryGraph) =>
-      request<{ dslText: string }>("/dsl/generate", { method: "POST", body: JSON.stringify(graph) }),
-  },
-
-  // Export
+  // Export a query plan's result as a new table (BTree/FYI), CSV or SQL.
   export: {
     csv: (graph: QueryGraph, tableName: string) =>
       request<string>("/export/csv", { method: "POST", body: JSON.stringify({ ...graph, tableName }) }),
@@ -244,17 +262,5 @@ export const api = {
 
     fyi: (graph: QueryGraph, tableName: string, primaryKeys: string[], outputFilePath: string, unique?: boolean) =>
       request<TableSchema>("/export/fyi", { method: "POST", body: JSON.stringify({ ...graph, tableName, primaryKeys, outputFilePath, unique }) }),
-  },
-
-  // Session
-  session: {
-    save: (path: string, data: SessionData) =>
-      request<void>("/session/save", {
-        method: "POST",
-        body: JSON.stringify({ path, ...data }),
-      }),
-
-    load: (path: string) =>
-      request<SessionData>(`/session/load?path=${encodeURIComponent(path)}`),
   },
 };

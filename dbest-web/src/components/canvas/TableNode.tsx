@@ -10,7 +10,6 @@ const TABLE_TYPE_COLORS = {
   fyi:    { bg: "#fefce8", border: "#ca8a04", text: "#a16207" },
   xml:    { bg: "#fdf2f8", border: "#db2777", text: "#be185d" },
   memory: { bg: "#eff6ff", border: "#2563eb", text: "#1d4ed8" },
-  jdbc:   { bg: "#f5f3ff", border: "#7c3aed", text: "#6d28d9" },
 };
 
 const TableNode = memo(({ id, data, selected }: NodeProps) => {

@@ -55,10 +55,12 @@ export function serializeCanvasToQuery(
       }
     });
 
-  // Build edges for visited subgraph only
+  // Build edges for visited subgraph only. Carry the target handle so the
+  // backend can tell a binary operator's left input from its right input by the
+  // handle the user connected to, instead of by the order edges were drawn.
   const graphEdges: GraphEdge[] = edges
     .filter((e) => visited.has(e.source) && visited.has(e.target))
-    .map((e): GraphEdge => ({ source: e.source, target: e.target }));
+    .map((e): GraphEdge => ({ source: e.source, target: e.target, targetHandle: e.targetHandle }));
 
   return {
     rootNodeId,

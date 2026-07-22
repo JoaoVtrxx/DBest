@@ -7,10 +7,9 @@ test.describe("E2E Multi-Operator Pipeline", () => {
   });
 
   test("should execute a pipeline: Table -> Filter -> Projection -> Limit", async ({ page }) => {
-    // 1. Import CSV
-    const importCsvBtn = page.getByTestId("import-csv-btn");
-    await expect(importCsvBtn).toBeVisible();
-    await importCsvBtn.click();
+    // 1. Import CSV (via the File menu)
+    await page.getByTestId("menu-file-btn").click();
+    await page.getByTestId("menu-import-csv").click();
 
     await page.locator('input[placeholder="Defaults to filename without extension"]').fill("multi_students");
     await page.locator('input[type="file"]').setInputFiles(path.join(__dirname, "fixtures", "mock_students.csv"));
@@ -106,11 +105,16 @@ test.describe("E2E Multi-Operator Pipeline", () => {
     const resultsTable = page.getByTestId("results-table");
     await expect(resultsTable).toBeVisible({ timeout: 15000 });
 
-    // Validate table headers (should be name, course)
+    // Validate the projection restricted the columns to (name, course).
+    // The data viewer prepends a "#" row-number column, so 2 projected columns
+    // render as 3 <th> ("#", name, course). If the projection had leaked the
+    // other columns (id, age) there would be 5 <th> here.
     const headers = resultsTable.locator("thead th");
-    await expect(headers).toHaveCount(2);
-    await expect(headers.first()).toHaveText("name");
-    await expect(headers.nth(1)).toHaveText("course");
+    await expect(headers).toHaveCount(3);
+    await expect(headers.nth(1)).toHaveText("name");
+    await expect(headers.nth(2)).toHaveText("course");
+    await expect(resultsTable.locator("thead")).not.toContainText("age");
+    await expect(resultsTable.locator("thead")).not.toContainText("id");
 
     // Validate row count (excluding header)
     const rows = resultsTable.locator("tbody tr");

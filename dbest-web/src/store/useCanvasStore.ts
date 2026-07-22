@@ -33,7 +33,7 @@ export interface TableNodeData {
   label: string;
   tableId: string;
   tableName: string;
-  tableType: "csv" | "fyi" | "xml" | "memory" | "jdbc";
+  tableType: "csv" | "fyi" | "xml" | "memory";
   columns?: string[];
   [key: string]: unknown;
 }

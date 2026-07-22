@@ -1,20 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import IconButton from "./ui/IconButton";
 import { api } from "@/lib/api";
 
-export type ActiveMode =
-  | "none"
-  | "import"
-  | "create_table"
-  | "add_edge"
-  | "remove"
-  | "remove_all"
-  | "screenshot"
-  | "console"
-  | "text_editor"
-  | "comparator";
+// The Comparator is the only bottom-bar tool. The desktop toolbar has more
+// (Import, Create Table, Add Edge, Remove, Remove All, Screenshot, Console/Text
+// Editor DSL), but on the web each of those is either done elsewhere — importing
+// from the tables sidebar, creating a Memory table there, removing a node with
+// Delete or its context menu, connecting by dragging between handles — or has no
+// web backing (Screenshot, DSL tools). So they were dropped instead of shipping
+// buttons that do nothing.
+export type ActiveMode = "none" | "comparator";
 
 interface FooterProps {
   activeMode?: ActiveMode;
@@ -24,29 +21,11 @@ interface FooterProps {
 interface ToolbarButton {
   icon: string;
   label: string;
-  shortcut?: string;
   mode: ActiveMode;
-  variant?: "default" | "ghost" | "danger";
 }
 
 const TOOLBAR_BUTTONS: ToolbarButton[] = [
-  { icon: "📥", label: "Import Table", shortcut: "(i)", mode: "import" },
-  { icon: "➕", label: "Create Table", shortcut: "(c)", mode: "create_table" },
-  { icon: "🔗", label: "Add Edge", shortcut: "(e)", mode: "add_edge" },
-  { icon: "🗑️", label: "Remove", shortcut: "(del)", mode: "remove", variant: "danger" },
-  { icon: "💣", label: "Remove All", mode: "remove_all", variant: "danger" },
-  { icon: "📷", label: "Screenshot", mode: "screenshot" },
-  { icon: "💻", label: "Console", mode: "console" },
-  { icon: "📝", label: "Text Editor", mode: "text_editor" },
   { icon: "⚖️", label: "Comparator", mode: "comparator" },
-];
-
-// Groups separated by visual dividers
-const BUTTON_GROUPS: ActiveMode[][] = [
-  ["import", "create_table"],
-  ["add_edge"],
-  ["remove", "remove_all"],
-  ["screenshot", "console", "text_editor", "comparator"],
 ];
 
 export default function Footer({ activeMode = "none", onModeChange }: FooterProps) {
@@ -55,8 +34,6 @@ export default function Footer({ activeMode = "none", onModeChange }: FooterProp
       onModeChange(activeMode === mode ? "none" : mode);
     }
   };
-
-  const buttonMap = Object.fromEntries(TOOLBAR_BUTTONS.map((b) => [b.mode, b]));
 
   // Connection Status Polling
   const [status, setStatus] = useState<"checking" | "connected" | "disconnected">("checking");
@@ -108,25 +85,15 @@ export default function Footer({ activeMode = "none", onModeChange }: FooterProp
         overflowY: "hidden",
       }}
     >
-      {BUTTON_GROUPS.map((group, gi) => (
-        <React.Fragment key={gi}>
-          {gi > 0 && <div className="separator" />}
-          {group.map((mode) => {
-            const btn = buttonMap[mode];
-            return (
-              <IconButton
-                key={mode}
-                icon={btn.icon}
-                label={btn.label}
-                shortcut={btn.shortcut}
-                active={activeMode === mode}
-                variant={btn.variant}
-                onClick={() => handleClick(mode)}
-                tooltip={btn.label}
-              />
-            );
-          })}
-        </React.Fragment>
+      {TOOLBAR_BUTTONS.map((btn) => (
+        <IconButton
+          key={btn.mode}
+          icon={btn.icon}
+          label={btn.label}
+          active={activeMode === btn.mode}
+          onClick={() => handleClick(btn.mode)}
+          tooltip={btn.label}
+        />
       ))}
 
       {/* Right side: status indicator */}

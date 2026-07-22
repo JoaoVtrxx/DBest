@@ -227,7 +227,17 @@ META-INF/
 
 # End of https://www.toptal.com/developers/gitignore/api/maven,java,intellij,eclipse
 
+# BTree data files and build artifacts (large; not part of the source delivery)
 *.dat
 *.head
 *.jar
+# Exception: the small BTree fixture the .dat filter e2e test needs to run on a clone
+!dbest-web/e2e/fixtures/movie.dat
+
+# IDE / editor project files
 .idea/
+*.iml
+nbactions.xml
+
+# API upload scratch directory (runtime artifact, created wherever the API runs)
+uploads/

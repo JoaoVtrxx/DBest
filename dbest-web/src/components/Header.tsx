@@ -5,17 +5,13 @@ import IconButton from "./ui/IconButton";
 import { downloadSession, uploadSession } from "@/lib/sessionSerializer";
 import { useTablesStore } from "@/store/useTablesStore";
 import { useCanvasStore } from "@/store/useCanvasStore";
+import { useModalsStore } from "@/store/useModalsStore";
 
 interface HeaderProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
-  onOpenDatabaseConnection?: () => void;
-  onOpenCsvTable?: () => void;
-  onOpenBTreeTable?: () => void;
-  onOpenHeadFileTable?: () => void;
-  onOpenQuery?: () => void;
 }
 
 // ── Dropdown Menu component ──────────────────────────────────────────────────
@@ -24,6 +20,7 @@ interface DropdownItem {
   icon?: string;
   onClick: () => void;
   divider?: boolean;
+  testId?: string;
 }
 interface DropdownProps {
   label: string;
@@ -47,6 +44,7 @@ function Dropdown({ label, items }: DropdownProps) {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
+        data-testid={"menu-" + label.toLowerCase() + "-btn"}
         onClick={() => setOpen((v) => !v)}
         style={{
           display: "flex",
@@ -118,6 +116,7 @@ function Dropdown({ label, items }: DropdownProps) {
                 />
               )}
               <button
+                data-testid={item.testId}
                 onClick={() => {
                   item.onClick();
                   setOpen(false);
@@ -163,14 +162,10 @@ export default function Header({
   canRedo = false,
   onUndo,
   onRedo,
-  onOpenDatabaseConnection,
-  onOpenCsvTable,
-  onOpenBTreeTable,
-  onOpenHeadFileTable,
-  onOpenQuery,
 }: HeaderProps) {
   const { tables, addTable } = useTablesStore();
   const { nodes, edges, loadSession } = useCanvasStore();
+  const { openImport } = useModalsStore();
 
   const handleSave = () => downloadSession(tables, nodes, edges);
   const handleOpen = async () => {
@@ -186,30 +181,28 @@ export default function Header({
   };
   const fileItems: DropdownItem[] = [
     {
-      label: "Open Database Connection",
-      icon: "🔌",
-      onClick: () => onOpenDatabaseConnection?.(),
-    },
-    {
       label: "Open CSV Table",
       icon: "📄",
-      onClick: () => onOpenCsvTable?.(),
+      onClick: () => openImport("csv"),
+      testId: "menu-import-csv",
     },
     {
       label: "Open Indexed Data (BTree)",
       icon: "🌲",
-      onClick: () => onOpenBTreeTable?.(),
+      onClick: () => openImport("dat"),
+      testId: "menu-import-dat",
     },
     {
-      label: "Open DBest Header File",
-      icon: "📋",
-      onClick: () => onOpenHeadFileTable?.(),
+      label: "Open XML Table",
+      icon: "🗂️",
+      onClick: () => openImport("xml"),
+      testId: "menu-import-xml",
     },
     {
-      label: "Open Query",
-      icon: "📂",
-      divider: true,
-      onClick: () => onOpenQuery?.(),
+      label: "New In-Memory Table",
+      icon: "🧱",
+      onClick: () => openImport("memory"),
+      testId: "menu-import-memory",
     },
     {
       label: "Save Session",
@@ -221,19 +214,6 @@ export default function Header({
       label: "Load Session",
       icon: "📤",
       onClick: handleOpen,
-    },
-  ];
-
-  const appearanceItems: DropdownItem[] = [
-    {
-      label: "Dark Mode (default)",
-      icon: "🌙",
-      onClick: () => {},
-    },
-    {
-      label: "Light Mode (coming soon)",
-      icon: "☀️",
-      onClick: () => {},
     },
   ];
 
@@ -277,7 +257,7 @@ export default function Header({
 
       {/* Menus */}
       <Dropdown label="File" items={fileItems} />
-      <Dropdown label="Appearance" items={appearanceItems} />
+      {/* Appearance menu removed — the dark/light toggle was a no-op. */}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />

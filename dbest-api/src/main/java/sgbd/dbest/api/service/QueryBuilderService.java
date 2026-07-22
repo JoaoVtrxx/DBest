@@ -4,6 +4,7 @@ import ibd.query.Operation;
 import ibd.query.binaryop.join.*;
 import ibd.query.binaryop.set.*;
 import ibd.query.lookup.*;
+import ibd.query.sourceop.IndexScan;
 import ibd.query.unaryop.*;
 import ibd.query.unaryop.filter.Filter;
 import ibd.query.unaryop.sort.Sort;
@@ -55,11 +56,13 @@ public class QueryBuilderService {
             nodeMap.put(n.id, n);
         }
 
-        // Build a map: targetNodeId → list of source node IDs (children)
-        // An edge "source → target" means source is a CHILD of target.
-        Map<String, List<String>> childrenMap = new HashMap<>();
+        // Build a map: targetNodeId → list of incoming EDGES (children).
+        // An edge "source → target" means source is a CHILD of target. Keeping the
+        // whole edge (not just the source id) lets binary operators tell the LEFT
+        // child from the RIGHT child by the edge's targetHandle.
+        Map<String, List<EdgeDto>> childrenMap = new HashMap<>();
         for (EdgeDto e : edges) {
-            childrenMap.computeIfAbsent(e.target, k -> new ArrayList<>()).add(e.source);
+            childrenMap.computeIfAbsent(e.target, k -> new ArrayList<>()).add(e);
         }
 
         return buildNode(rootNodeId, nodeMap, childrenMap, tableService);
@@ -69,7 +72,7 @@ public class QueryBuilderService {
 
     private Operation buildNode(String nodeId,
                                 Map<String, NodeDto> nodeMap,
-                                Map<String, List<String>> childrenMap,
+                                Map<String, List<EdgeDto>> childrenMap,
                                 TableService tableService) throws Exception {
 
         NodeDto node = nodeMap.get(nodeId);
@@ -77,7 +80,7 @@ public class QueryBuilderService {
             throw new IllegalArgumentException("Node not found: " + nodeId);
         }
 
-        List<String> children = childrenMap.getOrDefault(nodeId, Collections.emptyList());
+        List<EdgeDto> children = childrenMap.getOrDefault(nodeId, Collections.emptyList());
 
         if ("table".equalsIgnoreCase(node.type)) {
             // Leaf node — resolve directly from TableService
@@ -97,7 +100,13 @@ public class QueryBuilderService {
                 if (pred == null || pred.isBlank()) {
                     throw new IllegalArgumentException("Filter operator predicate is not configured.");
                 }
-                LookupFilter filter = parsePredicate(pred);
+                // Resolve the target columns' declared types so numeric literals are
+                // boxed to the SAME Java type stored in the rows. Otherwise, e.g. an
+                // INTEGER column value (Integer) compared against a Long literal throws
+                // a swallowed ClassCastException and the filter silently returns 0 rows.
+                Map<String, String> colTypes = new HashMap<>();
+                collectColumnTypes(child, colTypes);
+                LookupFilter filter = parsePredicate(pred, colTypes);
                 yield new Filter(child, filter);
             }
 
@@ -117,7 +126,7 @@ public class QueryBuilderService {
                 Operation childOp;
                 String groupByCol = null;
                 if (!children.isEmpty()) {
-                    String childId = children.get(0);
+                    String childId = children.get(0).source;
                     NodeDto childNode = nodeMap.get(childId);
                     if (childNode != null && "HASH_GROUP".equalsIgnoreCase(childNode.operatorType)) {
                         Map<String, String> groupArgs = childNode.arguments != null ? childNode.arguments : Collections.emptyMap();
@@ -125,7 +134,7 @@ public class QueryBuilderService {
                         if (!groupOrdered.isEmpty()) {
                             groupByCol = groupOrdered.get(0);
                         }
-                        List<String> grandChildren = childrenMap.getOrDefault(childId, Collections.emptyList());
+                        List<EdgeDto> grandChildren = childrenMap.getOrDefault(childId, Collections.emptyList());
                         childOp = buildSingleChild(childId, grandChildren, nodeMap, childrenMap, tableService);
                     } else {
                         childOp = buildSingleChild(nodeId, children, nodeMap, childrenMap, tableService);
@@ -266,6 +275,26 @@ public class QueryBuilderService {
         };
     }
 
+    // ── Helper: collect column types from a built operation subtree ────────────
+
+    /**
+     * Descends an already-built {@link Operation} subtree and records, for every
+     * table reached, a mapping {@code columnName → prototype type} (e.g.
+     * {@code "INTEGER"}, {@code "LONG"}, {@code "STRING"}). Used to box filter
+     * literals to the exact Java type held in the rows.
+     */
+    private void collectColumnTypes(Operation op, Map<String, String> out) {
+        if (op == null) return;
+        if (op instanceof IndexScan scan && scan.table != null) {
+            for (ibd.table.prototype.column.Column c : scan.table.getPrototype().getColumns()) {
+                out.putIfAbsent(c.getName(), c.getType());
+            }
+        }
+        for (Operation child : op.getChildOperations()) {
+            collectColumnTypes(child, out);
+        }
+    }
+
     // ── Helper: resolve a table-type leaf node ─────────────────────────────────
 
     private Operation buildTableNode(NodeDto node, TableService tableService) {
@@ -279,31 +308,55 @@ public class QueryBuilderService {
     // ── Helper: single-child operators ────────────────────────────────────────
 
     private Operation buildSingleChild(String nodeId,
-                                       List<String> children,
+                                       List<EdgeDto> children,
                                        Map<String, NodeDto> nodeMap,
-                                       Map<String, List<String>> childrenMap,
+                                       Map<String, List<EdgeDto>> childrenMap,
                                        TableService tableService) throws Exception {
         if (children.isEmpty()) {
             throw new IllegalArgumentException(
                 "Unary operator '" + nodeId + "' has no child.");
         }
         // Use first child (if multiple, warn)
-        return buildNode(children.get(0), nodeMap, childrenMap, tableService);
+        return buildNode(children.get(0).source, nodeMap, childrenMap, tableService);
     }
 
     // ── Helper: two-child (binary) operators ──────────────────────────────────
 
+    /**
+     * Resolves the two inputs of a binary operator, distinguishing LEFT from
+     * RIGHT by each edge's {@code targetHandle} ({@code "target-left"} /
+     * {@code "target-right"}) — the handle the user actually connected to on the
+     * canvas. Only when the handles are missing or don't identify both sides does
+     * it fall back to the order the edges happen to appear in, so directional
+     * operators (difference, outer joins) no longer depend on drawing order.
+     */
     private Operation[] buildTwoChildren(String nodeId,
-                                         List<String> children,
+                                         List<EdgeDto> children,
                                          Map<String, NodeDto> nodeMap,
-                                         Map<String, List<String>> childrenMap,
+                                         Map<String, List<EdgeDto>> childrenMap,
                                          TableService tableService) throws Exception {
         if (children.size() < 2) {
             throw new IllegalArgumentException(
                 "Binary operator '" + nodeId + "' needs 2 children, found " + children.size());
         }
-        Operation left  = buildNode(children.get(0), nodeMap, childrenMap, tableService);
-        Operation right = buildNode(children.get(1), nodeMap, childrenMap, tableService);
+
+        EdgeDto leftEdge = null;
+        EdgeDto rightEdge = null;
+        for (EdgeDto e : children) {
+            if ("target-left".equals(e.targetHandle) && leftEdge == null) {
+                leftEdge = e;
+            } else if ("target-right".equals(e.targetHandle) && rightEdge == null) {
+                rightEdge = e;
+            }
+        }
+        // Fallback: handles absent/ambiguous → use the order the edges arrived in.
+        if (leftEdge == null || rightEdge == null) {
+            leftEdge = children.get(0);
+            rightEdge = children.get(1);
+        }
+
+        Operation left  = buildNode(leftEdge.source, nodeMap, childrenMap, tableService);
+        Operation right = buildNode(rightEdge.source, nodeMap, childrenMap, tableService);
         return new Operation[]{left, right};
     }
 
@@ -323,21 +376,28 @@ public class QueryBuilderService {
      * <p>For column-to-column comparisons in joins, use {@link #parseJoinPredicate}.
      */
     public LookupFilter parsePredicate(String predicate) throws Exception {
+        return parsePredicate(predicate, Collections.emptyMap());
+    }
+
+    /**
+     * Same as {@link #parsePredicate(String)}, but uses {@code colTypes}
+     * (columnName → prototype type) to box numeric literals to the exact Java
+     * type stored in the rows, avoiding silent {@code ClassCastException}s during
+     * comparison (e.g. INTEGER column vs Long literal).
+     */
+    public LookupFilter parsePredicate(String predicate, Map<String, String> colTypes) throws Exception {
         if (predicate == null || predicate.isBlank()) {
             return new NoLookupFilter();
         }
 
         String trimmed = predicate.trim();
 
-        // Handle AND / OR composites (split on top-level AND/OR, not inside parens)
-        String upper = trimmed.toUpperCase();
-
         // Try to split on " AND " first
         List<String> andParts = splitOnKeyword(trimmed, " AND ");
         if (andParts.size() > 1) {
             CompositeLookupFilter composite = new CompositeLookupFilter(CompositeLookupFilter.AND);
             for (String part : andParts) {
-                composite.addFilter(parseSingleCondition(part.trim()));
+                composite.addFilter(parseSingleCondition(part.trim(), colTypes));
             }
             return composite;
         }
@@ -347,16 +407,16 @@ public class QueryBuilderService {
         if (orParts.size() > 1) {
             CompositeLookupFilter composite = new CompositeLookupFilter(CompositeLookupFilter.OR);
             for (String part : orParts) {
-                composite.addFilter(parseSingleCondition(part.trim()));
+                composite.addFilter(parseSingleCondition(part.trim(), colTypes));
             }
             return composite;
         }
 
-        return parseSingleCondition(trimmed);
+        return parseSingleCondition(trimmed, colTypes);
     }
 
     /** Parses a single condition like {@code age > 30} or {@code name IS NULL}. */
-    private LookupFilter parseSingleCondition(String condition) throws Exception {
+    private LookupFilter parseSingleCondition(String condition, Map<String, String> colTypes) throws Exception {
         String upper = condition.toUpperCase();
 
         // IS NOT NULL
@@ -389,7 +449,9 @@ public class QueryBuilderService {
                 int cmpType  = operatorToComparisonType(op);
 
                 Element elem1 = new ColumnElement(left);
-                Element elem2 = parseValueElement(right);
+                // Look up the left column's declared type to box the literal correctly.
+                String colName = left.contains(".") ? left.substring(left.indexOf('.') + 1) : left;
+                Element elem2 = parseValueElement(right, colTypes.get(colName));
                 return new SingleColumnLookupFilter(elem1, cmpType, elem2);
             }
         }
@@ -397,14 +459,40 @@ public class QueryBuilderService {
         throw new IllegalArgumentException("Cannot parse predicate: " + condition);
     }
 
-    /** Determines if a value string is a column reference or a literal. */
-    private Element parseValueElement(String value) throws Exception {
+    /**
+     * Determines if a value string is a column reference or a literal.
+     *
+     * @param colType the declared prototype type of the column being compared
+     *                (e.g. {@code "INTEGER"}, {@code "LONG"}), or {@code null} if
+     *                unknown. Used to box the literal to the exact Java type held
+     *                in the rows, so comparisons don't fail on Integer vs Long.
+     */
+    private Element parseValueElement(String value, String colType) throws Exception {
         // Strip surrounding quotes → string literal
         if ((value.startsWith("'") && value.endsWith("'"))
                 || (value.startsWith("\"") && value.endsWith("\""))) {
             return new LiteralElement(value.substring(1, value.length() - 1));
         }
-        // Try numeric literal
+
+        // If we know the column's type, box the literal to match it exactly.
+        if (colType != null) {
+            try {
+                switch (colType.toUpperCase()) {
+                    case "INTEGER":   return new LiteralElement(Integer.parseInt(value));
+                    case "LONG":      return new LiteralElement(Long.parseLong(value));
+                    case "FLOAT":     return new LiteralElement(Float.parseFloat(value));
+                    case "DOUBLE":    return new LiteralElement(Double.parseDouble(value));
+                    case "BOOLEAN":   return new LiteralElement(Boolean.parseBoolean(value));
+                    case "STRING":
+                    case "CHARACTER": return new LiteralElement(value); // unquoted string literal
+                    default: break;
+                }
+            } catch (NumberFormatException ignored) {
+                // Value doesn't fit the declared type — fall through to the heuristic.
+            }
+        }
+
+        // Type unknown — infer from the literal's shape.
         try {
             if (value.contains(".")) {
                 return new LiteralElement(Double.parseDouble(value));

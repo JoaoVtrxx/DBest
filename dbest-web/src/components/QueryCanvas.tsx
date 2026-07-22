@@ -198,7 +198,7 @@ export default function QueryCanvas() {
               const d = n.data as TableNodeData;
               const colors: Record<string, string> = {
                 csv: "#16a34a", fyi: "#ca8a04", xml: "#db2777",
-                memory: "#2563eb", jdbc: "#7c3aed",
+                memory: "#2563eb",
               };
               return colors[d.tableType] ?? "#94a3b8";
             }

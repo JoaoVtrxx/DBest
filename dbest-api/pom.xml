@@ -66,6 +66,17 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring.boot.version}</version>
+                <!-- This project uses a custom parent (dbest-parent), not
+                     spring-boot-starter-parent, so the repackage goal is not
+                     auto-bound. Declare it explicitly so `mvn package` produces
+                     an executable fat jar runnable with `java -jar`. -->
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

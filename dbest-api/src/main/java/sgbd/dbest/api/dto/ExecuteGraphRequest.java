@@ -76,5 +76,13 @@ public class ExecuteGraphRequest {
         public String source;
         /** Node that consumes tuples (parent/output). */
         public String target;
+        /**
+         * For binary operators (joins/set ops): which input handle of the target
+         * this edge connects to — {@code "target-left"} or {@code "target-right"}.
+         * Lets the backend tell the LEFT child from the RIGHT child by the visual
+         * handle instead of by the (arbitrary) order the edges were drawn.
+         * Null for unary operators or older clients that don't send it.
+         */
+        public String targetHandle;
     }
 }

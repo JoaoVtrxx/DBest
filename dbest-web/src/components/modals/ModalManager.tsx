@@ -14,16 +14,14 @@ import NodeInfoModal from "./NodeInfoModal";
 import ImportCSVModal from "./ImportCSVModal";
 import {
   ImportXMLModal,
-  ImportFYIModal,
   ImportMemoryModal,
-  ImportJDBCModal,
   ImportDatModal,
-  ImportHeadModal,
 } from "./ImportModals";
 import ExportModal from "./ExportModal";
+import ComparatorModal from "./ComparatorModal";
 
 export default function ModalManager() {
-  const { openModal, targetNode, dataViewerCtx, close } = useModalsStore();
+  const { openModal, targetNode, dataViewerCtx, comparePlans, close } = useModalsStore();
 
   if (!openModal) return null;
 
@@ -38,16 +36,14 @@ export default function ModalManager() {
     case "data_viewer":  return targetNode ? <DataViewerModal node={targetNode} onClose={close} ctx={dataViewerCtx} /> : null;
     case "node_info":    return targetNode ? <NodeInfoModal node={targetNode} onClose={close} /> : null;
     case "export":       return targetNode ? <ExportModal node={targetNode} onClose={close} /> : null;
-    
+    case "comparator":   return <ComparatorModal plans={comparePlans ?? []} onClose={close} />;
+
     // Import modals
     case "import_csv":    return <ImportCSVModal onClose={close} />;
     case "import_xml":    return <ImportXMLModal onClose={close} />;
-    case "import_fyi":    return <ImportFYIModal onClose={close} />;
     case "import_memory": return <ImportMemoryModal onClose={close} />;
-    case "import_jdbc":   return <ImportJDBCModal onClose={close} />;
     case "import_dat":    return <ImportDatModal onClose={close} />;
-    case "import_head":   return <ImportHeadModal onClose={close} />;
-    
+
     default:             return null;
   }
 }

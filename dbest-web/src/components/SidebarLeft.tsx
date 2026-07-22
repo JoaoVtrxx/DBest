@@ -4,17 +4,6 @@ import React, { useState } from "react";
 import { useTablesStore, DBTable, TableType, TABLE_TYPE_META } from "@/store/useTablesStore";
 import TableEntry from "./TableEntry";
 import RenameInline from "./RenameInline";
-import ImportCSVModal from "./modals/ImportCSVModal";
-import {
-  ImportXMLModal,
-  ImportFYIModal,
-  ImportMemoryModal,
-  ImportJDBCModal,
-  ImportDatModal,
-  ImportHeadModal,
-} from "./modals/ImportModals";
-
-type ImportModalKind = "csv" | "xml" | "fyi" | "memory" | "jdbc" | "dat" | "head" | null;
 
 // ── Section header ─────────────────────────────────────────────────────────────
 function SectionHeader({ label, count }: { label: string; count: number }) {
@@ -97,7 +86,6 @@ export default function SidebarLeft() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<TableType | "all">("all");
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [importModal, setImportModal] = useState<ImportModalKind>(null);
 
   // Filter & search
   const filteredTables = tables.filter((t) => {
@@ -113,7 +101,7 @@ export default function SidebarLeft() {
 
   const renamingTable = tables.find((t) => t.id === renamingId);
 
-  const filterTypes: (TableType | "all")[] = ["all", "csv", "xml", "fyi", "memory", "jdbc"];
+  const filterTypes: (TableType | "all")[] = ["all", "csv", "xml", "fyi", "memory"];
   const availableTypes = filterTypes.filter(
     (type) => type === "all" || tables.some((t) => t.type === type)
   );
@@ -278,62 +266,6 @@ export default function SidebarLeft() {
           )}
         </div>
 
-        {/* ─── Bottom action strip ─── */}
-        <div
-          style={{
-            borderTop: "1px solid var(--border-subtle)",
-            padding: "6px 8px",
-            display: "flex",
-            gap: "4px",
-            flexShrink: 0,
-          }}
-        >
-          {[
-            { icon: "📄", label: "CSV",    kind: "csv"  as ImportModalKind, title: "Import CSV file" },
-            { icon: "🗂️", label: "XML",    kind: "xml"  as ImportModalKind, title: "Import XML file" },
-            { icon: "🌲", label: ".head",  kind: "head" as ImportModalKind, title: "Open Header (.head) file" },
-            { icon: "💾", label: ".dat",   kind: "dat"  as ImportModalKind, title: "Open BTree (.dat) file" },
-            { icon: "🧱", label: "Memory", kind: "memory" as ImportModalKind, title: "Create in-memory BTree" },
-            { icon: "🔌", label: "DB",     kind: "jdbc" as ImportModalKind, title: "Connect to Database (JDBC)" },
-          ].map((btn) => (
-            <button
-              key={btn.kind}
-              title={btn.title}
-              onClick={() => setImportModal(btn.kind)}
-              data-testid={"import-" + btn.kind + "-btn"}
-              style={{
-                flex: 1,
-                padding: "4px 2px",
-                background: "var(--bg-tertiary)",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text-secondary)",
-                fontSize: "10px",
-                fontFamily: "var(--font-sans)",
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "2px",
-                transition: "all var(--transition-fast)",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-hover)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-default)";
-                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-tertiary)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-subtle)";
-                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-              }}
-            >
-              <span style={{ fontSize: "13px" }}>{btn.icon}</span>
-              <span>{btn.label}</span>
-            </button>
-          ))}
-        </div>
-
         {/* ─── Selected table info strip ─── */}
         {selectedTableId && (() => {
           const t = tables.find((x) => x.id === selectedTableId);
@@ -385,15 +317,6 @@ export default function SidebarLeft() {
           onCancel={() => setRenamingId(null)}
         />
       )}
-
-      {/* Import modals */}
-      {importModal === "csv"    && <ImportCSVModal    onClose={() => setImportModal(null)} />}
-      {importModal === "xml"    && <ImportXMLModal    onClose={() => setImportModal(null)} />}
-      {importModal === "fyi"    && <ImportFYIModal    onClose={() => setImportModal(null)} />}
-      {importModal === "memory" && <ImportMemoryModal onClose={() => setImportModal(null)} />}
-      {importModal === "jdbc"   && <ImportJDBCModal   onClose={() => setImportModal(null)} />}
-      {importModal === "dat"    && <ImportDatModal    onClose={() => setImportModal(null)} />}
-      {importModal === "head"   && <ImportHeadModal   onClose={() => setImportModal(null)} />}
     </>
   );
 }

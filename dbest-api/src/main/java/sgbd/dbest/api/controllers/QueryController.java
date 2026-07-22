@@ -1,6 +1,7 @@
 package sgbd.dbest.api.controllers;
 
 import database.TuplesExtractor;
+import entities.cells.CellStats;
 import ibd.query.Operation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -179,6 +180,56 @@ public class QueryController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage() != null ? e.getMessage() : e.toString()));
         }
+    }
+
+    /**
+     * Compares several marked query plans, returning per plan the same
+     * execution-cost metrics the desktop's Comparator window shows.
+     * POST /api/query/compare
+     *
+     * <p>The metrics come from the core's global counters (QueryStats / Parameters),
+     * surfaced via {@code CellStats}. Because those counters are static and shared,
+     * plans are measured <em>sequentially</em>, snapshotting the counters before and
+     * after each plan and reporting the difference — mirroring how {@code ComparatorFrame}
+     * resets and diffs stats per marked cell. Never parallelize this loop, or the
+     * counters of different plans would bleed into each other.
+     */
+    @PostMapping("/query/compare")
+    public ResponseEntity<?> compare(@RequestBody CompareRequest req) {
+        List<CompareResponse.PlanStats> out = new ArrayList<>();
+        if (req.plans != null) {
+            CellStats.reset();
+            for (CompareRequest.PlanDto plan : req.plans) {
+                CompareResponse.PlanStats ps = new CompareResponse.PlanStats();
+                ps.id = plan.id;
+                ps.label = plan.label;
+                try {
+                    CellStats before = CellStats.getTotalCurrentStats();
+
+                    Operation op = queryBuilderService.buildOperation(
+                            plan.rootNodeId, plan.nodes, plan.edges, tableService);
+                    op.open();
+                    long count = 0;
+                    while (op.hasNext()) {
+                        op.next();
+                        count++;
+                        if (req.limit > 0 && count >= req.limit) break;
+                    }
+                    op.close();
+
+                    CellStats after = CellStats.getTotalCurrentStats();
+                    ps.ok = true;
+                    ps.tuplesLoaded = count;
+                    ps.metrics = after.getDiff(before).toMap();
+                } catch (Exception e) {
+                    ps.ok = false;
+                    ps.error = e.getMessage() != null ? e.getMessage() : e.toString();
+                    ps.metrics = CellStats.getEmptyStats().toMap();
+                }
+                out.add(ps);
+            }
+        }
+        return ResponseEntity.ok(new CompareResponse(out));
     }
 
     /**

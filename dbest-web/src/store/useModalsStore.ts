@@ -14,13 +14,11 @@ export type ModalKind =
   | "data_viewer"
   | "node_info"
   | "export"
+  | "comparator"
   | "import_csv"
   | "import_xml"
-  | "import_fyi"
   | "import_memory"
-  | "import_jdbc"
   | "import_dat"
-  | "import_head"
   | null;
 
 // Map operator types to their modal kind
@@ -66,17 +64,27 @@ export interface DataViewerContext {
   graphData?: import("@/lib/api").QueryGraph; // execute an operator graph
 }
 
+/** One query plan to be compared by the ComparatorModal (mirrors the desktop:
+ *  each marked output cell becomes one column in the comparison window). */
+export interface ComparePlan {
+  id: string;
+  label: string;
+  graph: import("@/lib/api").QueryGraph;
+}
+
 interface ModalsState {
   openModal: ModalKind;
   targetNode: FlowNode | null;
   dataViewerCtx: DataViewerContext | null;
+  comparePlans: ComparePlan[] | null;
   // Actions
   openForNode: (node: FlowNode) => void;
   openDataViewer: (node: FlowNode, ctx?: DataViewerContext) => void;
   openNodeInfo: (node: FlowNode) => void;
   openEdit: (node: FlowNode) => void;
-  openImport: (kind: "csv" | "xml" | "fyi" | "memory" | "jdbc" | "dat" | "head") => void;
+  openImport: (kind: "csv" | "xml" | "memory" | "dat") => void;
   openExport: (node: FlowNode) => void;
+  openComparator: (plans: ComparePlan[]) => void;
   close: () => void;
 }
 
@@ -84,6 +92,7 @@ export const useModalsStore = create<ModalsState>((set) => ({
   openModal: null,
   targetNode: null,
   dataViewerCtx: null,
+  comparePlans: null,
 
   openForNode: (node) => {
     const data = node.data as Record<string, unknown>;
@@ -113,5 +122,8 @@ export const useModalsStore = create<ModalsState>((set) => ({
   openExport: (node) =>
     set({ openModal: "export", targetNode: node, dataViewerCtx: null }),
 
-  close: () => set({ openModal: null, targetNode: null, dataViewerCtx: null }),
+  openComparator: (plans) =>
+    set({ openModal: "comparator", comparePlans: plans, targetNode: null, dataViewerCtx: null }),
+
+  close: () => set({ openModal: null, targetNode: null, dataViewerCtx: null, comparePlans: null }),
 }));

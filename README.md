@@ -1,78 +1,163 @@
-<img src="./assets/images/dbest-logo2.png" alt="Logo do DBest" width="256">
+# DBest Web
 
-# Database Engine for Seamless Transformations (DBest)
+Porta para o navegador do **DBest**, o motor de execução de planos de consulta
+(álgebra relacional) usado nas aulas do Prof. Sergio Mergen. A ideia é oferecer a
+mesma experiência do aplicativo desktop — montar um plano de consulta arrastando
+operadores e executá-lo — só que na web, **sem reescrever o motor**: o backend
+reaproveita o `dbest-core` original e o expõe por uma API REST.
 
-**DBest** is an interactive database engine designed for creating, visualizing, and executing query plans. This engine enables users to design query execution plans through an intuitive drag-and-drop interface, making it easier to understand query execution, optimize performance, and integrate diverse data sources. DBest is ideal for teaching, data integration, and enhancing query efficiency.
+Projeto original (desktop): <https://github.com/mergen-sergio/DBest>.
+Esta versão web é um trabalho de aluno e está em estágio **beta**: o ciclo
+principal funciona de ponta a ponta, mas a paleta de operadores é propositalmente
+enxuta (veja _Limitações_).
 
+## O que dá para fazer
 
-Key features of the DBest engine include:  
-- **Creating Query Plans**: Build complex query execution plans using a drag-and-drop interface.  
-- **Visualizing Execution Trees**: Gain clear insights into query structures and operator relationships.  
-- **Optimizing Performance**: Improve query efficiency by adjusting execution paths.  
-- **Teaching Database Concepts**: Provide students with practical tools to learn query optimization and database internals.  
-- **Integrating Data Sources**: Seamlessly combine data from heterogeneous data sources
-  
-<br>
+- Importar tabelas em CSV, XML, BTree (`.dat`, opcionalmente com seu `.head`) e em memória, pelo menu **File**.
+- Montar um plano no canvas com os operadores **Filter, Projection, Sort e Limit**,
+  ligando as tabelas e operadores por arestas.
+- Executar o plano e navegar pelo resultado paginado.
+- **Comparar planos**: marque o nó de saída de cada plano e abra o _Comparator_
+  para ver, lado a lado, as métricas de custo que o desktop mostra (tuplas lidas,
+  blocos acessados/carregados/salvos, comparações de filtro, uso de memória,
+  chamadas `next`, buscas por chave primária, registros lidos, tuplas ordenadas).
+- Exportar o resultado de um plano como uma nova tabela (BTree), CSV ou SQL.
+- Salvar e recarregar a sessão (tabelas + canvas) como um arquivo JSON local.
+- Desfazer/refazer (`Ctrl+Z` / `Ctrl+Y`).
 
----
+## Arquitetura
 
-<br>
+O repositório é um monorepo Maven com três módulos:
 
-## DBest as a Query Execution Tool
+| Módulo       | Papel                                                                                  | Stack                                                 |
+| ------------ | -------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `dbest-core` | Motor de execução original (desktop). **Código do professor** — não deve ser alterado. | Java 17, Swing, mxGraph, ANTLR                        |
+| `dbest-api`  | Camada REST fina que embrulha o `dbest-core` e o expõe por HTTP.                       | Spring Boot 3.2.5, Java 17                            |
+| `dbest-web`  | Frontend: canvas de operadores, modais de import e visualização de resultados.         | Next.js 14, React 18, TypeScript, React Flow, Zustand |
 
-It is important to note that **DBest is not a query optimizer**. While traditional database management systems (DBMS) often include sophisticated query optimization techniques that automatically transform SQL queries into efficient execution plans, DBest operates differently. DBest's primary function is to **execute predefined query plans** that have been manually created by the user.
+O fluxo de uma consulta:
 
+1. No `dbest-web`, o usuário monta o grafo no canvas (React Flow). O estado vive em
+   `src/store/useCanvasStore.ts`.
+2. Ao executar, `src/lib/querySerializer.ts` percorre o grafo a partir do nó
+   escolhido e serializa para JSON (`{ rootNodeId, nodes, edges }`).
+3. `src/lib/api.ts` faz `POST /api/query/execute`.
+4. No `dbest-api`, `QueryBuilderService.buildOperation(...)` traduz esse JSON numa
+   árvore de `ibd.query.Operation` do core.
+5. `TuplesExtractor.getAllRowsList(...)` executa a árvore; o controller pagina e
+   devolve as linhas.
 
-In DBest:
+O contrato entre os dois lados são as **strings de tipo de operador** (`"FILTER"`,
+`"PROJECTION"`, …) e o formato dos `arguments`. Ao mexer num lado, ajuste o outro:
+`mapArgumentsToRecord()` (TypeScript) precisa casar com o `switch (opType)` do
+`QueryBuilderService` (Java).
 
-- **User-Defined Query Plans**: Users manually create query plans by selecting operators and arranging them into an execution tree. The query plan is explicitly designed by the user, specifying exactly how the query should be executed.
-  
-- **No Automatic Query Optimization**: DBest does not automatically optimize query plans. Unlike a DBMS, which analyzes queries to find the most efficient execution path, DBest assumes that the user has designed the query plan based on their specific needs and understanding of the data. 
+## Como rodar
 
-- **Execution of Query Plans**: DBest's role is to **execute the provided query plan** exactly as it is defined. This includes reading the input data, applying the selected operators, and producing a result set based on the sequence of operations specified by the user.
+Pré-requisitos: **JDK 17+** (testado com 17 e 21), **Maven 3.9+**, **Node 18+**.
+No Windows, habilite caminhos longos antes de clonar, senão o build do core falha:
 
-While DBest does not optimize queries, it provides **query cost indicators** to help users analyze the performance of their query execution:
+```bash
+git config --system core.longpaths true
+```
 
-<!-- - **Execution Time**: DBest tracks the time it takes to execute each operator and the overall query plan. -->
-- **Memory Usage**: DBest provides information on memory usage during query execution, helping users identify areas where memory may become a bottleneck.
-- **Operator Costs**: Each operator in the query plan has an associated cost, and DBest can collect and report on the cost of executing individual operators, allowing users to identify expensive operations and adjust their query plans accordingly.
+**1. Compilar o backend** (core + api), a partir da raiz:
 
-These indicators help users understand the efficiency of their query plans, enabling them to make informed decisions about how to optimize their plans manually if needed.
+```bash
+mvn -DskipTests install
+```
 
-<br>
+> Use `-DskipTests`: carregar o `dbest-core` sobe uma thread AWT não-daemon, então
+> o JVM dos testes não encerra e o build trava (veja _Limitações_).
 
----
+**2. Subir a API** (porta 8080):
 
-<br>
+```bash
+mvn -pl dbest-api spring-boot:run
+# ou, com o jar já compilado:
+java -jar dbest-api/target/dbest-api-0.0.1-SNAPSHOT.jar
+```
 
+No Windows, garanta que o `java` em uso é o JDK 17+ (o do `PATH` pode ser um JDK 8,
+que não roda o jar). Teste: `curl http://localhost:8080/api/status`.
 
-## Getting Started
+**3. Subir o frontend** (porta 3000):
 
-To get started with DBest, follow these steps:
+```bash
+cd dbest-web
+npm install
+npm run dev
+```
 
-1. **Install DBest:**  
-   Download the DBest JAR [file](DBest.jar) and run it to launch the tool. Make sure you have Java 17 installed, as it is required to execute the application.
+Abra <http://localhost:3000>. O frontend fala com a API em
+`http://localhost:8080/api` (configurável por `NEXT_PUBLIC_API_URL`). A API só
+aceita requisições de `localhost:3000` / `127.0.0.1:3000` (CORS).
 
-2. **Read the [Wiki](https://github.com/mergen-sergio/DBest/wiki):**
-   Explore the wiki for a comprehensive, step-by-step guide to using DBest. Learn how to create indexes, build query trees, and run queries effectively.
+## Testes
 
-3. **Access Sample Data:**  
-   Practice using the tool with sample data provided in the wiki. You can download the dataset [here](https://github.com/mergen-sergio/DBest/wiki/01a%20-%20tutorial-data).
+Os testes do frontend precisam da API no ar; o Playwright sobe o Next sozinho.
 
-<br>
+```bash
+cd dbest-web
+npx playwright test      # end-to-end (import, execução, pipeline, comparator)
+npm test                 # unitário do serializador de query
+npm run build            # build de produção (checa tipos)
+```
 
----
+Os testes end-to-end cobrem o ciclo real: importam uma tabela (CSV e BTree `.dat`),
+montam operadores no canvas, executam e verificam o resultado.
 
-<br>
+## Organização do projeto
 
-## About DBest
+```
+.
+├── dbest-core/     motor original (desktop) — não modificar
+├── dbest-api/      API Spring Boot
+│   └── src/main/java/sgbd/dbest/api/
+│       ├── controllers/   rotas REST (tabelas, execução, export, upload)
+│       ├── service/        QueryBuilderService (JSON → árvore), TableService
+│       └── dto/            objetos de requisição/resposta
+├── dbest-web/      frontend Next.js
+│   └── src/
+│       ├── app/            página principal
+│       ├── components/     canvas, modais, layout
+│       ├── store/          estado global (Zustand)
+│       ├── lib/            cliente HTTP e serializador
+│       └── data/           catálogo de operadores da paleta
+├── dados/          arquivos BTree de aula (.dat/.head) — não versionados
+└── pom.xml         agregador Maven
+```
 
-DBest began as a project under the guidance of **Professor Sergio Mergen**, initially designed to teach database internals. Over time, it evolved to cover additional topics, including relational algebra, broadening its educational scope. Today, DBest also serves as a practical tool for seamlessly integrating data sources.
+## Limitações conhecidas
 
-Special acknowledgment goes to **Rhuan Moreira Maciel** and **Luiz Henrique Broch Lago**, whose early contributions were important in the development and growth of the tool.
+- **Paleta enxuta.** Só Filter, Projection, Sort e Limit estão disponíveis. Os
+  modais e o roteamento de Join, União, Group By e Aggregation existem no código
+  (e há wiring parcial no `QueryBuilderService`), mas esses operadores **não foram
+  validados** e ficaram fora da paleta. Vale como base para continuação, não como
+  funcionalidade entregue.
+- **Agregação depende do core.** No `dbest-core`, `COUNT(*)` sem _group by_ retorna
+  vazio e `AVG/SUM/MIN/MAX` só funcionam sobre colunas `INTEGER` (fazem cast fixo).
+  Consertar isso exigiria alterar o código do professor, o que este trabalho não faz.
+- **Sem isolamento por sessão.** O `TableService` usa o mapa estático global do core
+  (`controllers.MainController`), então todos os navegadores compartilham as mesmas
+  tabelas. Não é multiusuário.
+- **`mvn test` trava.** A thread AWT/Swing não-daemon do core impede o JVM de teste
+  de encerrar. Use sempre `-DskipTests`; para rodar testes de verdade seria preciso
+  desacoplar o `TableService` do estado estático do core e rodar headless.
+- **Windows / MAX_PATH.** Nomes de arquivo longos herdados do core estouram o limite
+  de 260 caracteres em pastas profundas — use `core.longpaths true` ou um caminho curto.
 
+## Continuação sugerida
 
+Para as próximas turmas, em ordem aproximada de esforço/dependência:
 
-
-
+1. **Operadores binários (join, união, diferença).** O `OperatorNode` já tem os
+   _handles_ esquerdo/direito e o serializador grava `targetHandle`; falta validar
+   cada tipo com duas tabelas e reexpô-los na paleta um a um.
+2. **Group by + agregação sobre colunas `INTEGER`** (o caminho que o core executa
+   corretamente), qualificando a coluna pela fonte como o desktop faz.
+3. **Isolamento por sessão**, para virar multiusuário de verdade.
+4. **Destravar o `mvn test`** (headless / desacoplar do estado estático) para
+   reativar CI.
+5. **Sincronizar o `dbest-core` com o upstream** do professor quando houver novidades.
 

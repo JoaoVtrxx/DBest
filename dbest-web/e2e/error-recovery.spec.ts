@@ -7,10 +7,9 @@ test.describe("E2E Error Handling and Recovery", () => {
   });
 
   test("should handle execution errors and recover by configuring nodes correctly", async ({ page }) => {
-    // 1. Import CSV
-    const importCsvBtn = page.getByTestId("import-csv-btn");
-    await expect(importCsvBtn).toBeVisible();
-    await importCsvBtn.click();
+    // 1. Import CSV (via the File menu)
+    await page.getByTestId("menu-file-btn").click();
+    await page.getByTestId("menu-import-csv").click();
     await page.locator('input[placeholder="Defaults to filename without extension"]').fill("err_students");
     await page.locator('input[type="file"]').setInputFiles(path.join(__dirname, "fixtures", "mock_students.csv"));
     await page.getByRole("button", { name: "Import", exact: true }).click();

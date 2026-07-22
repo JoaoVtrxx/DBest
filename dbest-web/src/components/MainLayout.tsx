@@ -13,11 +13,6 @@ interface MainLayoutProps {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
-  onOpenDatabaseConnection?: () => void;
-  onOpenCsvTable?: () => void;
-  onOpenBTreeTable?: () => void;
-  onOpenHeadFileTable?: () => void;
-  onOpenQuery?: () => void;
   // Footer props
   activeMode?: ActiveMode;
   onModeChange?: (mode: ActiveMode) => void;
@@ -31,11 +26,6 @@ export default function MainLayout({
   canRedo,
   onUndo,
   onRedo,
-  onOpenDatabaseConnection,
-  onOpenCsvTable,
-  onOpenBTreeTable,
-  onOpenHeadFileTable,
-  onOpenQuery,
   activeMode,
   onModeChange,
 }: MainLayoutProps) {
@@ -56,11 +46,6 @@ export default function MainLayout({
         canRedo={canRedo}
         onUndo={onUndo}
         onRedo={onRedo}
-        onOpenDatabaseConnection={onOpenDatabaseConnection}
-        onOpenCsvTable={onOpenCsvTable}
-        onOpenBTreeTable={onOpenBTreeTable}
-        onOpenHeadFileTable={onOpenHeadFileTable}
-        onOpenQuery={onOpenQuery}
       />
 
       {/* ─── Main Content Row ─── */}

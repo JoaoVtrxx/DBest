@@ -19,11 +19,28 @@ export default function FilterModal({ node, onClose }: FilterModalProps) {
   const { allNames } = useColumnsBySide(node.id);
 
   const existing = (node.data as Record<string, unknown>).arguments as string[] | undefined;
+
+  // Infer the operand type from a saved value so re-opening a configured
+  // filter restores the right editor (a numeric value must not come back as a
+  // "column" select, which would show blank and be impossible to fix).
+  const inferType = (v: string | undefined): ValueType => {
+    if (v == null || v === "") return "column";
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) return "string";
+    if (!Number.isNaN(Number(v))) return "number";
+    return "column";
+  };
+
   const [left, setLeft] = useState(existing?.[0] ?? "");
-  const [leftType, setLeftType] = useState<ValueType>("column");
+  const [leftType, setLeftType] = useState<ValueType>(inferType(existing?.[0]));
   const [operator, setOperator] = useState(existing?.[1] ?? "=");
   const [right, setRight] = useState(existing?.[2] ?? "");
-  const [rightType, setRightType] = useState<ValueType>("column");
+  const [rightType, setRightType] = useState<ValueType>(inferType(existing?.[2]));
+
+  // Switching the operand type clears the stale value, otherwise a column name
+  // left over from "column" mode leaks into a number/string operand and the
+  // filter silently becomes "column op column".
+  const changeLeftType = (t: ValueType) => { setLeftType(t); setLeft(t === "null" ? "" : ""); };
+  const changeRightType = (t: ValueType) => { setRightType(t); setRight(t === "null" ? "" : ""); };
 
   const isNullOp = operator === "IS NULL" || operator === "IS NOT NULL";
 
@@ -51,7 +68,7 @@ export default function FilterModal({ node, onClose }: FilterModalProps) {
         <FieldGroup label="Left Operand">
           <div style={{ display: "flex", gap: "8px" }}>
             <div style={{ width: 110, flexShrink: 0 }}>
-              <StyledSelect value={leftType} onChange={(v) => setLeftType(v as ValueType)}>
+              <StyledSelect value={leftType} onChange={(v) => changeLeftType(v as ValueType)}>
                 <option value="column">Column</option>
                 <option value="number">Number</option>
                 <option value="string">String</option>
@@ -104,7 +121,7 @@ export default function FilterModal({ node, onClose }: FilterModalProps) {
           <FieldGroup label="Right Operand">
             <div style={{ display: "flex", gap: "8px" }}>
               <div style={{ width: 110, flexShrink: 0 }}>
-                <StyledSelect value={rightType} onChange={(v) => setRightType(v as ValueType)}>
+                <StyledSelect value={rightType} onChange={(v) => changeRightType(v as ValueType)}>
                   <option value="column">Column</option>
                   <option value="number">Number</option>
                   <option value="string">String</option>
